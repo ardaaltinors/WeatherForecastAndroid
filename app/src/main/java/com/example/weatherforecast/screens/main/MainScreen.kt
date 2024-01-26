@@ -22,7 +22,12 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -35,6 +40,7 @@ import com.example.weatherforecast.data.DataOrException
 import com.example.weatherforecast.model.Weather
 import com.example.weatherforecast.model.WeatherItem
 import com.example.weatherforecast.navigation.WeatherScreens
+import com.example.weatherforecast.screens.settings.SettingsViewModel
 import com.example.weatherforecast.utils.formatDate
 import com.example.weatherforecast.utils.formatDecimals
 import com.example.weatherforecast.widgets.HumidityWindPressureRow
@@ -44,20 +50,38 @@ import com.example.weatherforecast.widgets.WeatherDetailRow
 import com.example.weatherforecast.widgets.WeatherStateImage
 
 @Composable
-fun MainScreen(navController: NavController, mainViewModel: MainViewModel = hiltViewModel(), city: String?) {
+fun MainScreen(
+    navController: NavController,
+    mainViewModel: MainViewModel = hiltViewModel(),
+    settingsViewModel: SettingsViewModel = hiltViewModel(),
+    city: String?
+){
 
-    val weatherData = produceState<DataOrException<Weather, Boolean, Exception>
-            >(initialValue = DataOrException(loading = true)) {
-        value = mainViewModel.getWeatherData(city = city.toString())
-    }.value
+    val curCity: String = if (city!!.isBlank()) "istanbul" else city
 
-    if (weatherData.loading == true) {
-        CircularProgressIndicator()
-    } else if (weatherData.data != null) {
-        //Text(text = "main screen ${weatherData.data!!.city.country}")
-        MainScaffold(weather = weatherData.data!!, navController)
+    val unitFromDb = settingsViewModel.unitList.collectAsState().value
+    var unit by remember { mutableStateOf("metric") }
 
+    var isMetric by remember { mutableStateOf(false) }
+
+    if (!unitFromDb.isNullOrEmpty()) {
+        unit = unitFromDb[0].unit.split(" ")[0].lowercase()
+        isMetric = unit == "metric"
+
+        val weatherData = produceState<DataOrException<Weather, Boolean, Exception>
+                >(initialValue = DataOrException(loading = true)) {
+            value = mainViewModel.getWeatherData(city = curCity, units = unit)
+        }.value
+
+        if (weatherData.loading == true) {
+            CircularProgressIndicator()
+        } else if (weatherData.data != null) {
+            //Text(text = "main screen ${weatherData.data!!.city.country}")
+            MainScaffold(weather = weatherData.data!!, navController, isMetric = isMetric)
+
+        }
     }
+
 
 
 }
@@ -65,7 +89,7 @@ fun MainScreen(navController: NavController, mainViewModel: MainViewModel = hilt
 @OptIn(ExperimentalMaterial3Api::class)
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @Composable
-fun MainScaffold(weather: Weather, navController: NavController) {
+fun MainScaffold(weather: Weather, navController: NavController, isMetric: Boolean) {
 
     Scaffold(
         topBar = {
@@ -80,13 +104,13 @@ fun MainScaffold(weather: Weather, navController: NavController) {
         }
 
     ) {
-        MainContent(data = weather)
+        MainContent(data = weather, isMetric = isMetric)
     }
 
 }
 
 @Composable
-fun MainContent(data: Weather) {
+fun MainContent(data: Weather, isMetric: Boolean) {
 
     val weatherItem = data!!.list[0]
     val imageUrl = "https://openweathermap.org/img/wn/${weatherItem.weather[0].icon}.png"
@@ -131,7 +155,7 @@ fun MainContent(data: Weather) {
 
         }
 
-        HumidityWindPressureRow(weather = weatherItem)
+        HumidityWindPressureRow(weather = weatherItem, isMetric = isMetric)
         Divider()
         SunsetSunriseRow(weather = weatherItem)
         Text(
